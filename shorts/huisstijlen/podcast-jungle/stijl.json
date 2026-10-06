@@ -2,12 +2,12 @@
   "naam": "Podcast Jungle",
   "accent": "#16A34A",
   "accentTekst": "#FFFFFF",
-  "vlak": "#18181B",
-  "vlakDekking": 86,
+  "vlak": "#0F1A12",
+  "vlakDekking": 88,
   "tekst": "#FFFFFF",
-  "lettertype": "Archivo",
-  "eindkaart": "#16A34A",
-  "tagline": "Podcasts voor ondernemers",
+  "lettertype": "Montserrat",
+  "eindkaart": "#14532D",
+  "tagline": "Jouw verhaal, legendarisch goed verteld",
   "eindkaartAan": true,
   "ondertitels": true
 }
