@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jungle Shorts</title>
+<style>
+  :root {
+    --green: #16a34a; --green-hover: #15803d; --green-soft: #dcfce7;
+    --text: #111827; --muted: #6b7280; --border: #e5e7eb; --bg: #f9fafb; --card: #ffffff; --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { text-align: center; margin-bottom: 18px; }
+  header h1 { margin: 0; font-size: 24px; font-weight: 800; }
+  header h1 .j { color: var(--green); }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .between { justify-content: space-between; }
+  input[type=text], input[type=number], select {
+    font: inherit; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text);
+  }
+  input[type=text] { flex: 1; min-width: 0; }
+  input[type=number] { width: 72px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border); background: #fff; padding: 9px 14px; }
+  button:hover { background: #f3f4f6; }
+  .toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .toggle button { padding: 10px; border-radius: 999px; font-weight: 600; }
+  .toggle button.on { background: var(--green); border-color: var(--green); color: #fff; }
+  .primary { width: 100%; background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; padding: 12px; border-radius: 999px; }
+  .primary:hover { background: var(--green-hover); }
+  .primary:disabled { opacity: .6; cursor: progress; }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; line-height: 1.5; }
+  .error { color: var(--danger); font-size: 13px; margin: 8px 0 0; }
+  .chosen { margin-top: 8px; font-size: 12px; color: var(--green); word-break: break-all; }
+  .progress { height: 6px; background: #f3f4f6; border-radius: 99px; overflow: hidden; margin-top: 12px; }
+  .progress div { height: 100%; width: 0; background: var(--green); transition: width .3s; }
+  .clip { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; gap: 12px; }
+  .clip input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--green); margin-top: 2px; flex: none; }
+  .clip h3 { margin: 0 0 4px; font-size: 14px; }
+  .clip .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .clip .hook { font-style: italic; margin: 0 0 4px; }
+  .clip .why { color: var(--muted); font-size: 12px; margin: 0; }
+  .badge { display: inline-block; background: var(--green-soft); color: #166534; border-radius: 99px; padding: 1px 8px; font-weight: 600; font-size: 12px; }
+  .times { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .times input { width: 80px; padding: 5px 8px; }
+  .outputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .outputs video { width: 100%; border-radius: 10px; background: #000; }
+  .outputs a { font-size: 12px; color: var(--green); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🌴 <span class="j">Jungle</span> Shorts</h1>
+    <p>Van podcast naar shorts: highlights zoeken, knippen en ondertitelen</p>
+  </header>
+
+  <section class="card">
+    <h2>Kies een podcastvideo</h2>
+    <div class="row">
+      <input type="text" id="videoPath" placeholder="C:\Podcasts\aflevering-12.mp4">
+      <button id="browseBtn">Bladeren</button>
+      <input type="file" id="fileInput" accept="video/*" class="hidden">
+    </div>
+    <p class="hint">Plak het pad naar je video, of kies hem met Bladeren.</p>
+    <div class="chosen" id="chosen"></div>
+  </section>
+
+  <section class="card">
+    <h2>1. Aantal shorts en modus</h2>
+    <div class="row between">
+      <label for="count">Aantal shorts</label>
+      <input type="number" id="count" min="1" max="20" value="5">
+    </div>
+    <div class="toggle" role="group" aria-label="Modus">
+      <button data-mode="snel">Snel</button>
+      <button data-mode="grondig" class="on">Grondig</button>
+    </div>
+    <button class="primary" id="findBtn">✦ Highlights zoeken</button>
+    <div class="progress hidden" id="findProg"><div></div></div>
+    <p class="hint" id="findStep">Snel = sneller en goedkoper. Grondig = Claude denkt langer na over hook en afronding. De eerste keer wordt de video getranscribeerd; daarna gaat het direct.</p>
+    <p class="error" id="findErr"></p>
+  </section>
+
+  <section class="card">
+    <h2>Via link</h2>
+    <div class="row">
+      <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=…">
+      <button id="fetchBtn">Ophalen</button>
+    </div>
+    <p class="hint" id="fetchStep">Geen bestand bij de hand? Plak een YouTube- of Drive-link. De video wordt gedownload en hierboven ingevuld.</p>
+    <p class="error" id="fetchErr"></p>
+  </section>
+
+  <section class="card hidden" id="resultsCard">
+    <h2>2. Kies je shorts</h2>
+    <div id="clips"></div>
+    <div class="row between" style="margin: 12px 0;">
+      <div class="row">
+        <label for="format">Formaat</label>
+        <select id="format">
+          <option value="9:16">9:16 (TikTok, Reels, Shorts)</option>
+          <option value="1:1">1:1 (feed)</option>
+          <option value="16:9">16:9 (liggend)</option>
+        </select>
+      </div>
+      <label class="row"><input type="checkbox" id="subs" checked style="accent-color: var(--green)"> Ondertitels</label>
+    </div>
+    <button class="primary" id="renderBtn">Maak shorts</button>
+    <div class="progress hidden" id="renderProg"><div></div></div>
+    <p class="hint" id="renderStep"></p>
+    <p class="error" id="renderErr"></p>
+  </section>
+
+  <section class="card hidden" id="outCard">
+    <h2>3. Klaar</h2>
+    <div class="outputs" id="outputs"></div>
+    <p class="hint" id="outFolder"></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = "grondig";
+let state = { video: null, clips: [] };
+
+const fmtTime = s => { s = Math.max(0, s); const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; };
+const parseTime = v => { const p = String(v).split(":").map(Number); return p.length === 2 ? p[0] * 60 + p[1] : Number(v); };
+
+document.querySelectorAll(".toggle button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".toggle button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); mode = b.dataset.mode;
+});
+
+$("videoPath").oninput = () => { $("findErr").textContent = ""; };
+$("browseBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async () => {
+  const f = $("fileInput").files[0]; if (!f) return;
+  $("chosen").textContent = `Uploaden: ${f.name}…`;
+  const body = new FormData(); body.append("file", f);
+  const r = await fetch("/api/upload", { method: "POST", body });
+  const d = await r.json();
+  if (!r.ok) { $("chosen").textContent = ""; $("findErr").textContent = d.error; return; }
+  $("videoPath").value = d.video; $("chosen").textContent = `Klaar: ${f.name}`;
+};
+
+async function post(url, data) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Er ging iets mis.");
+  return d;
+}
+
+function poll(jobId, prog, step) {
+  prog.classList.remove("hidden");
+  return new Promise((resolve, reject) => {
+    const tick = async () => {
+      const j = await (await fetch(`/api/job/${jobId}`)).json();
+      prog.firstElementChild.style.width = `${Math.round(j.progress * 100)}%`;
+      step.textContent = j.step;
+      if (j.status === "klaar") { prog.classList.add("hidden"); resolve(j.result); }
+      else if (j.status === "fout") { prog.classList.add("hidden"); reject(new Error(j.error)); }
+      else setTimeout(tick, 1000);
+    };
+    tick();
+  });
+}
+
+$("findBtn").onclick = async () => {
+  $("findErr").textContent = "";
+  const video = $("videoPath").value.trim();
+  const count = parseInt($("count").value, 10);
+  if (!video) { $("findErr").textContent = "Kies eerst een video."; return; }
+  if (!(count >= 1 && count <= 20)) { $("findErr").textContent = "Kies tussen 1 en 20 shorts."; return; }
+  $("findBtn").disabled = true;
+  try {
+    const { job } = await post("/api/highlights", { video, count, mode });
+    const res = await poll(job, $("findProg"), $("findStep"));
+    state = { video: res.video, clips: res.clips };
+    showClips();
+    $("findStep").textContent = `${res.clips.length} highlights gevonden.`;
+  } catch (e) { $("findErr").textContent = e.message; }
+  $("findBtn").disabled = false;
+};
+
+function showClips() {
+  $("clips").innerHTML = "";
+  state.clips.forEach((c, i) => {
+    const el = document.createElement("div");
+    el.className = "clip";
+    el.innerHTML = `
+      <input type="checkbox" checked data-i="${i}">
+      <div style="flex:1;min-width:0">
+        <h3></h3>
+        <div class="meta"><span class="badge">${c.score}/10</span> &nbsp;${fmtTime(c.start)}–${fmtTime(c.end)} · ${Math.round(c.end - c.start)} sec</div>
+        <p class="hook"></p>
+        <p class="why"></p>
+        <div class="times">Begin <input type="text" value="${fmtTime(c.start)}" data-k="start" data-i="${i}">
+          Eind <input type="text" value="${fmtTime(c.end)}" data-k="end" data-i="${i}"></div>
+      </div>`;
+    el.querySelector("h3").textContent = c.title;
+    el.querySelector(".hook").textContent = `“${c.hook}”`;
+    el.querySelector(".why").textContent = `${c.reason}  —  ${c.caption} ${c.hashtags.map(h => "#" + h).join(" ")}`;
+    $("clips").appendChild(el);
+  });
+  $("clips").querySelectorAll(".times input").forEach(inp => inp.onchange = () => {
+    const v = parseTime(inp.value);
+    if (!isNaN(v)) state.clips[inp.dataset.i][inp.dataset.k] = v;
+  });
+  $("resultsCard").classList.remove("hidden");
+  $("resultsCard").scrollIntoView({ behavior: "smooth" });
+}
+
+$("renderBtn").onclick = async () => {
+  $("renderErr").textContent = "";
+  const picked = [...$("clips").querySelectorAll("input[type=checkbox]:checked")].map(cb => state.clips[cb.dataset.i]);
+  if (!picked.length) { $("renderErr").textContent = "Selecteer minstens één short."; return; }
+  if (picked.some(c => !(c.end > c.start))) { $("renderErr").textContent = "Eindtijd moet na de begintijd liggen."; return; }
+  $("renderBtn").disabled = true;
+  try {
+    const { job } = await post("/api/render", { video: state.video, clips: picked, format: $("format").value, subtitles: $("subs").checked });
+    const res = await poll(job, $("renderProg"), $("renderStep"));
+    $("outputs").innerHTML = "";
+    res.files.forEach(f => {
+      const d = document.createElement("div");
+      d.innerHTML = `<video controls preload="metadata" src="${f.url}"></video><a download href="${f.url}">Download</a>`;
+      d.prepend(Object.assign(document.createElement("div"), { textContent: f.title, style: "font-weight:600;font-size:13px;margin-bottom:4px" }));
+      $("outputs").appendChild(d);
+    });
+    $("outFolder").textContent = `Opgeslagen in: ${res.folder}`;
+    $("renderStep").textContent = `${res.files.length} shorts klaar.`;
+    $("outCard").classList.remove("hidden");
+    $("outCard").scrollIntoView({ behavior: "smooth" });
+  } catch (e) { $("renderErr").textContent = e.message; }
+  $("renderBtn").disabled = false;
+};
+
+$("url").oninput = () => { $("fetchErr").textContent = ""; };
+$("fetchBtn").onclick = async () => {
+  const url = $("url").value.trim();
+  if (!url) { $("fetchErr").textContent = "Plak eerst een link."; return; }
+  $("fetchBtn").disabled = true;
+  try {
+    const { job } = await post("/api/fetch", { url });
+    const res = await poll(job, Object.assign(document.createElement("div"), { innerHTML: "<div></div>" }), $("fetchStep"));
+    $("videoPath").value = res.video;
+    $("chosen").textContent = "Video opgehaald.";
+    $("fetchStep").textContent = "Klaar. Druk nu op Highlights zoeken.";
+  } catch (e) { $("fetchErr").textContent = e.message; }
+  $("fetchBtn").disabled = false;
+};
+</script>
+</body>
+</html>
