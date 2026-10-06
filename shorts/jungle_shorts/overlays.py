@@ -60,7 +60,7 @@ def tijdlijn(clip, segments, ondertitels=True):
             ws, c_eind = c[:-1], c[-1]["_eind"]
             if ws[0]["start"] <= t < c_eind:
                 actief = max(i for i, w in enumerate(ws) if w["start"] <= t)
-                st["sub"] = {"woorden": [w["word"] for w in ws], "actief": actief}
+                st["sub"] = {"woorden": [w["word"].strip(".,!?;:") or w["word"] for w in ws], "actief": actief}
                 break
         for a, b, g in graphics:
             if a <= t < b:

@@ -43,6 +43,8 @@ def main():
     segments = pipeline.transcribe(video, progress=lambda p: print(f"\r  {p:4.0%}", end="", flush=True))
     print("\nHighlights en graphics kiezen...")
     clips = pipeline.select_highlights(segments, count=args.aantal, mode=args.modus)
+    if len(clips) < args.aantal:
+        print(f"Let op: {len(clips)} bruikbare shorts gevonden in plaats van {args.aantal}.")
 
     out_dir = Path(args.uit) if args.uit else Path(__file__).parent / "werkmap" / "shorts" / video.stem
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -22,9 +22,13 @@ MAX_CLIP_SEC = 90
 # ---------------------------------------------------------------- transcript
 
 def transcribe(video, model_size="small", language="nl", progress=None):
-    """Transcribeer met faster-whisper (woord-timestamps). Cachet naast de video."""
+    """Transcribeer met faster-whisper (woord-timestamps). Cachet in werkmap/transcripten, niet naast de video
+    (die staat vaak op een netwerkschijf)."""
     video = Path(video)
-    cache = video.with_suffix(video.suffix + ".transcript.json")
+    stat = video.stat()
+    cache_dir = Path(__file__).resolve().parent.parent / "werkmap" / "transcripten"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache = cache_dir / f"{video.stem}_{stat.st_size}.json"
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
 
@@ -142,7 +146,7 @@ def select_highlights(segments, count=5, mode="grondig", client=None):
         system=SYSTEM_PROMPT.format(min_sec=MIN_CLIP_SEC, max_sec=MAX_CLIP_SEC),
         messages=[{
             "role": "user",
-            "content": f"Kies de {count} beste shorts uit dit transcript.\n\n<transcript>\n"
+            "content": f"Kies de {count + 3} beste shorts uit dit transcript (een paar reserves).\n\n<transcript>\n"
                        f"{_format_transcript(segments)}\n</transcript>",
         }],
         output_config={
@@ -164,12 +168,16 @@ def select_highlights(segments, count=5, mode="grondig", client=None):
     clips = [snap_to_segments(c, segments) for c in clips]
     clips = [c for c in clips if c["end"] - c["start"] >= MIN_CLIP_SEC * 0.6]
     clips.sort(key=lambda c: c["score"], reverse=True)
-    return clips[:count]
+    gekozen = []
+    for c in clips:
+        if all(c["end"] <= g["start"] or c["start"] >= g["end"] for g in gekozen):
+            gekozen.append(c)
+    return gekozen[:count]
 
 
 def snap_to_segments(clip, segments):
     """Leg begin en eind op zinsgrenzen, binnen de toegestane duur."""
-    start, end = float(clip["start"]), float(clip["end"])
+    start, end = sorted((float(clip["start"]), float(clip["end"])))
     starts = [s["start"] for s in segments]
     ends = [s["end"] for s in segments]
     if starts:
