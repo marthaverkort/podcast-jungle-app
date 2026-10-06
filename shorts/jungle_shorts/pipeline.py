@@ -135,9 +135,10 @@ def select_highlights(segments, count=5, mode="grondig", client=None):
     client = client or anthropic.Anthropic()
     effort = "low" if mode == "snel" else "high"
 
-    response = client.messages.create(
+    # Streaming: 10 shorts met graphics plus nadenken is een lang antwoord.
+    with client.messages.stream(
         model=MODEL,
-        max_tokens=16000,
+        max_tokens=64000,
         system=SYSTEM_PROMPT.format(min_sec=MIN_CLIP_SEC, max_sec=MAX_CLIP_SEC),
         messages=[{
             "role": "user",
@@ -151,7 +152,8 @@ def select_highlights(segments, count=5, mode="grondig", client=None):
         # Bij een (onterechte) weigering laat de API automatisch een ander model het overnemen.
         extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
         extra_body={"fallbacks": "default"},
-    )
+    ) as stream:
+        response = stream.get_final_message()
     if response.stop_reason == "refusal":
         raise RuntimeError("Claude weigerde dit transcript te verwerken.")
     if response.stop_reason == "max_tokens":
@@ -250,7 +252,7 @@ def render_clip(video, clip, segments, out_dir, fmt="9:16", stijl=None, index=1)
 
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg niet gevonden. Installeer ffmpeg en zet het in je PATH.")
-    out_dir = Path(out_dir)
+    out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     width, height = FORMATS[fmt]
     start, end = clip["start"], clip["end"]

@@ -23,6 +23,8 @@ Het ontwerp van de graphics zelf staat in Claude Design (canvas "Jungle Shorts t
 - Kies een video (pad plakken of Bladeren), of plak een YouTube- of Drive-link bij **Via link**.
 - Kies het aantal shorts en **Snel** of **Grondig**, en druk op **Highlights zoeken**.
 - Vink de clips aan die je wilt, pas eventueel begin en eind aan, kies formaat en huisstijl en druk op **Maak shorts**.
+
+Zonder de app, in één keer: `python maak_shorts.py "<map of video>" --aantal 10 --huisstijl podcast-jungle`. Geef je een map, dan pakt hij de grootste video. Er komt ook een `captions.json` met captions en hashtags bij.
 - De shorts staan in `werkmap/shorts/<videonaam>/`.
 
 ## Bekende beperkingen
