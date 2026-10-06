@@ -70,8 +70,27 @@ HIGHLIGHT_SCHEMA = {
                     "reason": {"type": "string"},
                     "caption": {"type": "string"},
                     "hashtags": {"type": "array", "items": {"type": "string"}},
+                    "overlays": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": ["hook", "stat", "punt"]},
+                                "start": {"type": "number"},
+                                "end": {"type": "number"},
+                                "kicker": {"type": "string"},
+                                "tekst": {"type": "string"},
+                                "highlight": {"type": "string"},
+                                "waarde": {"type": "string"},
+                                "nummer": {"type": "string"},
+                                "sub": {"type": "string"},
+                            },
+                            "required": ["type", "start", "end", "kicker", "tekst", "highlight", "waarde", "nummer", "sub"],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
-                "required": ["title", "hook", "start", "end", "score", "reason", "caption", "hashtags"],
+                "required": ["title", "hook", "start", "end", "score", "reason", "caption", "hashtags", "overlays"],
                 "additionalProperties": False,
             },
         }
@@ -95,7 +114,16 @@ Regels:
 - score (1-10) = hoe sterk de hook en de afronding zijn. Wees streng.
 - title: korte pakkende titel (max 8 woorden). hook: de letterlijke openingszin. reason: waarom dit werkt (1 zin).
 - caption: social caption van 1-3 zinnen in de taal van de podcast. hashtags: 3-6 stuks, zonder #.
-- Sorteer op score, hoogste eerst."""
+- Sorteer op score, hoogste eerst.
+
+Graphics (overlays) per short — je bent ook de motion designer:
+- Altijd precies één "hook" in de eerste 0-4 seconden: kicker = label van 1-2 woorden in hoofdletters (bijv. "LET OP", "EN JIJ?"),
+  tekst = de kern van de short in max 6 woorden, highlight = het ene woord uit die tekst dat de lading draagt.
+- "stat" alleen als de spreker een concreet getal noemt: waarde = het getal zoals op beeld ("64,4%", "€12.000", "3x"),
+  tekst = wat het getal betekent in max 5 woorden, kicker = 1 woord duiding. Zet hem op het moment dat het getal valt, 2-4 seconden.
+- "punt" voor een opsomming of genummerd inzicht: nummer, tekst = het punt in max 6 woorden, sub = toelichting in max 7 woorden.
+- Hoogstens 3 overlays per short, nooit twee tegelijk. Liever weinig en raak dan veel. Velden die niet van toepassing zijn: lege string.
+- start/end van overlays zijn tijdstempels in de podcast (dus binnen start-end van de short)."""
 
 
 def _format_transcript(segments):
@@ -154,65 +182,8 @@ def snap_to_segments(clip, segments):
 
 # ---------------------------------------------------------------- render
 
-def _ass_time(t):
-    t = max(t, 0)
-    h, rem = divmod(t, 3600)
-    m, s = divmod(rem, 60)
-    return f"{int(h)}:{int(m):02d}:{s:05.2f}"
-
-
-def _chunk_words(words, max_words=3, max_gap=0.6, max_len=1.4):
-    chunks, cur = [], []
-    for w in words:
-        if cur and (
-            len(cur) >= max_words
-            or w["start"] - cur[-1]["end"] > max_gap
-            or w["end"] - cur[0]["start"] > max_len
-            or cur[-1]["word"].endswith((".", "?", "!"))
-        ):
-            chunks.append(cur)
-            cur = []
-        cur.append(w)
-    if cur:
-        chunks.append(cur)
-    return chunks
-
-
-def build_ass(segments, start, end, width, height):
-    """Ondertitels in shorts-stijl: korte woordgroepen, groot en vet, actief woord in groen."""
-    words = [
-        w for s in segments for w in s.get("words", [])
-        if w["end"] > start and w["start"] < end and w["word"]
-    ]
-    font_size = int(width * 0.075)
-    margin_v = int(height * 0.22)
-    lines = [
-        "[Script Info]",
-        "ScriptType: v4.00+",
-        f"PlayResX: {width}",
-        f"PlayResY: {height}",
-        "",
-        "[V4+ Styles]",
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
-        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, "
-        "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Short,Arial Black,{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,"
-        f"-1,0,0,0,100,100,0,0,1,{max(font_size // 12, 4)},2,2,60,60,{margin_v},1",
-        "",
-        "[Events]",
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    ]
-    for chunk in _chunk_words(words):
-        for i, active in enumerate(chunk):
-            a = active["start"] - start
-            b = (chunk[i + 1]["start"] if i + 1 < len(chunk) else chunk[-1]["end"]) - start
-            text = " ".join(
-                ("{\\c&H5EC522&}" + w["word"].upper() + "{\\c&HFFFFFF&}") if w is active
-                else w["word"].upper()
-                for w in chunk
-            )
-            lines.append(f"Dialogue: 0,{_ass_time(a)},{_ass_time(b)},Short,,0,0,0,,{text}")
-    return "\n".join(lines) + "\n"
+FPS = 30
+EINDKAART_SEC = 2.0
 
 
 def _video_size(video):
@@ -225,41 +196,105 @@ def _video_size(video):
     return s["width"], s["height"]
 
 
-def render_clip(video, clip, segments, out_dir, fmt="9:16", subtitles=True, index=1):
-    """Knip, crop (midden) naar het gekozen formaat en brand ondertitels in."""
+def gezicht_x(video, start, end, stappen=12):
+    """Mediaan van de horizontale gezichtspositie (0-1) in de clip, of None zonder gezicht/OpenCV."""
+    try:
+        import cv2
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    except (ImportError, AttributeError):
+        return None
+    cap = cv2.VideoCapture(str(video))
+    xs = []
+    for i in range(stappen):
+        cap.set(cv2.CAP_PROP_POS_MSEC, (start + (end - start) * (i + 0.5) / stappen) * 1000)
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        grijs = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        h = grijs.shape[0]
+        faces = cascade.detectMultiScale(grijs, scaleFactor=1.1, minNeighbors=6, minSize=(h // 10, h // 10))
+        if len(faces):
+            x, _, w, _ = max(faces, key=lambda f: f[2] * f[3])
+            xs.append((x + w / 2) / grijs.shape[1])
+    cap.release()
+    return sorted(xs)[len(xs) // 2] if xs else None
+
+
+def _crop_filter(video, start, end, width, height):
+    src_w, src_h = _video_size(video)
+    if src_w / src_h <= width / height:
+        return f"crop=iw:iw*{height}/{width}"
+    crop_w = int(src_h * width / height) // 2 * 2
+    fx = gezicht_x(video, start, end)
+    x = (src_w - crop_w) // 2 if fx is None else int(min(max(fx * src_w - crop_w / 2, 0), src_w - crop_w))
+    return f"crop={crop_w}:ih:{x}:0"
+
+
+def _encode_args(out_name):
+    return ["-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", out_name]
+
+
+def _ffmpeg(cmd, cwd):
+    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg faalde: {proc.stderr[-800:]}")
+
+
+def render_clip(video, clip, segments, out_dir, fmt="9:16", stijl=None, index=1):
+    """Knip, crop op de spreker, leg de grafische laag (ondertitels + graphics) erover en plak de eindkaart erachter.
+
+    stijl: dict uit huisstijl.voor_overlay(); None = alleen knippen en croppen.
+    """
+    from . import overlays
+
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg niet gevonden. Installeer ffmpeg en zet het in je PATH.")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     width, height = FORMATS[fmt]
     start, end = clip["start"], clip["end"]
-
-    src_w, src_h = _video_size(video)
-    target_ratio = width / height
-    if src_w / src_h > target_ratio:
-        crop = f"crop=ih*{width}/{height}:ih"
-    else:
-        crop = f"crop=iw:iw*{height}/{width}"
-    filters = [crop, f"scale={width}:{height}", "setsar=1"]
+    video = Path(video).resolve()
 
     safe_title = "".join(c if c.isalnum() else "_" for c in clip.get("title", "short"))[:40].strip("_")
     name = f"short_{index:02d}_{safe_title or 'clip'}"
-    if subtitles:
-        ass_name = f"{name}.ass"
-        (out_dir / ass_name).write_text(build_ass(segments, start, end, width, height), encoding="utf-8")
-        # Relatieve bestandsnaam + cwd=out_dir: voorkomt escape-problemen met C:\-paden.
-        filters.append(f"ass={ass_name}")
+    werk = out_dir / f".{name}"
+    werk.mkdir(exist_ok=True)
+    base = f"{_crop_filter(video, start, end, width, height)},scale={width}:{height},setsar=1,fps={FPS}"
+    cmd = ["ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(video)]
 
-    out_file = out_dir / f"{name}.mp4"
-    cmd = [
-        "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(Path(video).resolve()),
-        "-t", f"{end - start:.2f}", "-vf", ",".join(filters),
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-        "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out_file.name,
-    ]
-    proc = subprocess.run(cmd, cwd=out_dir, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg faalde: {proc.stderr[-800:]}")
+    renderer = None
+    try:
+        if stijl:
+            renderer = overlays.Renderer(stijl, width, height)
+            reeks = overlays.tijdlijn(clip, segments, ondertitels=stijl.get("ondertitels", True))
+            laag = overlays.concat_lijst(reeks, renderer, werk)
+            cmd += ["-f", "concat", "-safe", "0", "-i", str(laag),
+                    "-filter_complex", f"[0:v]{base}[v];[1:v]format=rgba[o];[v][o]overlay=0:0:eof_action=pass,format=yuv420p[out]",
+                    "-map", "[out]", "-map", "0:a?"]
+        else:
+            cmd += ["-vf", base]
+        cmd += ["-t", f"{end - start:.2f}"]
+
+        hoofd = werk / "hoofd.mp4"
+        _ffmpeg(cmd + _encode_args(hoofd.name), werk)
+
+        out_file = out_dir / f"{name}.mp4"
+        if stijl and stijl.get("eindkaartAan", True):
+            kaart_png = renderer.png({"eind": True}, werk / "eindkaart.png")
+            _ffmpeg(["ffmpeg", "-y", "-loop", "1", "-t", f"{EINDKAART_SEC}", "-i", kaart_png.name,
+                     "-f", "lavfi", "-t", f"{EINDKAART_SEC}", "-i", "anullsrc=r=48000:cl=stereo",
+                     "-vf", f"scale={width}:{height},setsar=1,format=yuv420p", "-shortest"]
+                    + _encode_args("eind.mp4"), werk)
+            (werk / "lijst.txt").write_text("file 'hoofd.mp4'\nfile 'eind.mp4'\n", encoding="utf-8")
+            _ffmpeg(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "lijst.txt", "-c", "copy",
+                     "-movflags", "+faststart", str(out_file.resolve())], werk)
+        else:
+            hoofd.replace(out_file)
+    finally:
+        if renderer:
+            renderer.sluit()
+    shutil.rmtree(werk, ignore_errors=True)
     return out_file
 
 

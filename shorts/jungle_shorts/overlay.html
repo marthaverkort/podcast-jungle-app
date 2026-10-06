@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<!-- Grafische laag van een short. Wordt per tijdsmoment gerenderd naar een transparante PNG.
+     Zelfde opbouw als de componenten op het Claude Design-canvas "Jungle Shorts templates". -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800;900&family=Montserrat:wght@600;800;900&family=Poppins:wght@500;700;800&family=Inter+Tight:wght@500;700;800&display=swap">
+<style>
+  :root {
+    --accent: #FF5A1F;
+    --accent-tekst: #FFFFFF;
+    --vlak: rgba(24, 24, 27, 0.86);
+    --tekst: #FFFFFF;
+    --subtekst: rgba(255, 255, 255, 0.72);
+    --font: "Archivo";
+    --eindkaart: #FF5A1F;
+    --radius: 16px;
+  }
+  html, body { margin: 0; background: transparent; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: var(--font), sans-serif; color: var(--tekst); }
+  .laag { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; }
+
+  .kicker { background: var(--accent); color: var(--accent-tekst); font-weight: 800; font-size: 30px; letter-spacing: 0.06em;
+            text-transform: uppercase; padding: 6px 16px; border-radius: 8px; margin-bottom: 14px; }
+  .blok { background: var(--vlak); border-radius: var(--radius); padding: 12px 22px; }
+  .hl { background: var(--accent); color: var(--accent-tekst); border-radius: 10px; padding: 0 10px; }
+
+  /* Hook / kop */
+  #hook { top: 46%; }
+  #hook .blok { font-weight: 800; font-size: 66px; line-height: 1.2; max-width: 900px; text-align: center; }
+
+  /* Statistiek */
+  #stat { top: 44%; }
+  #stat .getal { background: var(--accent); color: var(--accent-tekst); font-weight: 900; font-size: 150px; line-height: 1.05;
+                 padding: 6px 40px; border-radius: 18px; }
+  #stat .blok { margin-top: 14px; font-weight: 700; font-size: 44px; }
+
+  /* Lijstpunt */
+  #punt { top: 48%; padding: 0 64px; align-items: stretch; }
+  #punt .balk { display: flex; align-items: center; gap: 22px; background: var(--vlak); border-radius: var(--radius); padding: 20px 26px; }
+  #punt .nr { flex: none; width: 60px; height: 60px; border-radius: 10px; background: var(--accent); color: var(--accent-tekst);
+              display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 34px; }
+  #punt .titel { font-weight: 800; font-size: 50px; line-height: 1.15; }
+  #punt .sub { color: var(--subtekst); font-weight: 500; font-size: 30px; margin-top: 4px; }
+
+  /* Ondertitels */
+  #sub { top: 66%; }
+  #sub .blok { font-weight: 800; font-size: 50px; line-height: 1.25; max-width: 940px; text-align: center; }
+  #sub .w { display: inline-block; margin: 0 3px; }
+
+  /* Eindkaart */
+  #eind { inset: 0; background: var(--eindkaart); justify-content: center; gap: 28px; }
+  #eind img { max-width: 560px; max-height: 260px; }
+  #eind .merk { font-weight: 900; font-size: 80px; letter-spacing: 0.02em; }
+  #eind .tagline { font-weight: 600; font-size: 40px; }
+
+  .uit { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="laag uit" id="hook"><div class="kicker"></div><div class="blok"></div></div>
+  <div class="laag uit" id="stat"><div class="kicker"></div><div class="getal"></div><div class="blok"></div></div>
+  <div class="laag uit" id="punt"><div class="balk"><div class="nr"></div><div><div class="titel"></div><div class="sub"></div></div></div></div>
+  <div class="laag uit" id="sub"><div class="blok"></div></div>
+  <div class="laag uit" id="eind"><img alt=""><div class="merk"></div><div class="tagline"></div></div>
+</div>
+<script>
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // Zet een tekst neer met één woord (highlight) in een accentblok.
+  function metHighlight(tekst, highlight) {
+    const t = esc(tekst), h = esc(highlight).trim();
+    if (!h) return t;
+    const i = t.toLowerCase().lastIndexOf(h.toLowerCase());
+    return i < 0 ? t : t.slice(0, i) + `<span class="hl">${t.slice(i, i + h.length)}</span>` + t.slice(i + h.length);
+  }
+
+  function toon(id, aan) { document.getElementById(id).classList.toggle("uit", !aan); }
+
+  window.zetStijl = function (s) {
+    const r = document.documentElement.style;
+    for (const [k, v] of Object.entries(s.css || {})) r.setProperty(k, v);
+    const img = document.querySelector("#eind img");
+    img.src = s.logo || ""; img.classList.toggle("uit", !s.logo);
+    document.querySelector("#eind .merk").textContent = s.logo ? "" : (s.naam || "");
+    document.querySelector("#eind .tagline").textContent = s.tagline || "";
+  };
+
+  // state: { hook, stat, punt, sub: {woorden, actief}, eind }
+  window.render = function (state) {
+    const { hook, stat, punt, sub, eind } = state;
+    toon("hook", !!hook);
+    if (hook) {
+      const k = document.querySelector("#hook .kicker");
+      k.textContent = hook.kicker || ""; k.classList.toggle("uit", !hook.kicker);
+      document.querySelector("#hook .blok").innerHTML = metHighlight(hook.tekst, hook.highlight);
+    }
+    toon("stat", !!stat);
+    if (stat) {
+      const k = document.querySelector("#stat .kicker");
+      k.textContent = stat.kicker || ""; k.classList.toggle("uit", !stat.kicker);
+      document.querySelector("#stat .getal").textContent = stat.waarde || "";
+      const b = document.querySelector("#stat .blok");
+      b.textContent = stat.sub || ""; b.classList.toggle("uit", !stat.sub);
+    }
+    toon("punt", !!punt);
+    if (punt) {
+      document.querySelector("#punt .nr").textContent = punt.nummer || "1";
+      document.querySelector("#punt .titel").textContent = punt.titel || "";
+      document.querySelector("#punt .sub").textContent = punt.sub || "";
+    }
+    toon("sub", !!(sub && sub.woorden && sub.woorden.length));
+    if (sub && sub.woorden) {
+      document.querySelector("#sub .blok").innerHTML = sub.woorden
+        .map((w, i) => `<span class="w${i === sub.actief ? " hl" : ""}">${esc(w)}</span>`).join(" ");
+    }
+    toon("eind", !!eind);
+  };
+</script>
+</body>
+</html>

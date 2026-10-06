@@ -2,3 +2,5 @@ flask>=3.0
 anthropic>=0.70
 faster-whisper>=1.1
 yt-dlp>=2025.1
+playwright>=1.45
+opencv-python-headless>=4.9,<5

@@ -51,6 +51,16 @@
   .outputs video { width: 100%; border-radius: 10px; background: #000; }
   .outputs a { font-size: 12px; color: var(--green); }
   .hidden { display: none; }
+  .stijl-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 20px; }
+  @media (max-width: 640px) { .stijl-grid { grid-template-columns: minmax(0, 1fr); } }
+  .stijl-form { display: flex; flex-direction: column; gap: 10px; }
+  .stijl-form > label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .stijl-form > label.row { flex-direction: row; color: var(--text); }
+  .kleuren { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+  .kleuren label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .kleuren input { width: 100%; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 2px; }
+  .telefoon { width: 270px; height: 480px; border-radius: 18px; overflow: hidden; background: #3a3f47 url("") center/cover; position: relative; }
+  .telefoon iframe { width: 1080px; height: 1920px; border: 0; transform: scale(0.25); transform-origin: 0 0; position: absolute; top: 0; left: 0; background: transparent; }
 </style>
 </head>
 <body>
@@ -109,7 +119,10 @@
           <option value="16:9">16:9 (liggend)</option>
         </select>
       </div>
-      <label class="row"><input type="checkbox" id="subs" checked style="accent-color: var(--green)"> Ondertitels</label>
+      <div class="row">
+        <label for="stijlKeuze">Huisstijl</label>
+        <select id="stijlKeuze"></select>
+      </div>
     </div>
     <button class="primary" id="renderBtn">Maak shorts</button>
     <div class="progress hidden" id="renderProg"><div></div></div>
@@ -121,6 +134,39 @@
     <h2>3. Klaar</h2>
     <div class="outputs" id="outputs"></div>
     <p class="hint" id="outFolder"></p>
+  </section>
+  <section class="card">
+    <h2>Huisstijlen</h2>
+    <div class="stijl-grid">
+      <div class="stijl-form">
+        <div class="row"><label for="stijlBewerk">Bewerk</label>
+          <select id="stijlBewerk"></select>
+          <button id="stijlNieuw">Nieuw</button></div>
+        <label>Naam <input type="text" id="s_naam" placeholder="Klantnaam"></label>
+        <div class="kleuren">
+          <label>Accent <input type="color" id="s_accent"></label>
+          <label>Tekst op accent <input type="color" id="s_accentTekst"></label>
+          <label>Vlak <input type="color" id="s_vlak"></label>
+          <label>Tekst <input type="color" id="s_tekst"></label>
+          <label>Eindkaart <input type="color" id="s_eindkaart"></label>
+        </div>
+        <label>Dekking vlak <input type="range" id="s_vlakDekking" min="0" max="100" step="1"></label>
+        <label>Lettertype <select id="s_lettertype"></select></label>
+        <label>Tagline eindkaart <input type="text" id="s_tagline" placeholder="No more boring podcasts"></label>
+        <label>Logo (png of svg, transparant) <input type="file" id="s_logo" accept=".png,.svg,.jpg,.jpeg,.webp"></label>
+        <label class="row"><input type="checkbox" id="s_ondertitels"> Ondertitels</label>
+        <label class="row"><input type="checkbox" id="s_eindkaartAan"> Eindkaart met logo</label>
+        <div class="row"><button class="primary" id="stijlOpslaan" style="width:auto;padding:10px 22px">Huisstijl opslaan</button>
+          <span class="hint" id="stijlMelding" style="margin:0"></span></div>
+      </div>
+      <div class="voorbeeld">
+        <div class="row" style="flex-wrap:wrap;margin-bottom:8px">
+          <button data-vb="hook">Hook</button><button data-vb="stat">Getal</button><button data-vb="punt">Lijstpunt</button><button data-vb="eind">Eindkaart</button>
+        </div>
+        <div class="telefoon"><iframe id="vb" src="/voorbeeld" title="Voorbeeld van de huisstijl"></iframe></div>
+      </div>
+    </div>
+    <p class="hint">Het ontwerp van de graphics staat in Claude Design (Jungle Shorts templates). Hier zet je per klant kleuren, lettertype, logo en tagline.</p>
   </section>
 </main>
 
@@ -223,7 +269,7 @@ $("renderBtn").onclick = async () => {
   if (picked.some(c => !(c.end > c.start))) { $("renderErr").textContent = "Eindtijd moet na de begintijd liggen."; return; }
   $("renderBtn").disabled = true;
   try {
-    const { job } = await post("/api/render", { video: state.video, clips: picked, format: $("format").value, subtitles: $("subs").checked });
+    const { job } = await post("/api/render", { video: state.video, clips: picked, format: $("format").value, huisstijl: $("stijlKeuze").value });
     const res = await poll(job, $("renderProg"), $("renderStep"));
     $("outputs").innerHTML = "";
     res.files.forEach(f => {
@@ -254,6 +300,87 @@ $("fetchBtn").onclick = async () => {
   } catch (e) { $("fetchErr").textContent = e.message; }
   $("fetchBtn").disabled = false;
 };
+
+// ---------------------------------------------------------------- huisstijlen
+const VELDEN = ["naam", "accent", "accentTekst", "vlak", "vlakDekking", "tekst", "lettertype", "eindkaart", "tagline", "ondertitels", "eindkaartAan"];
+let stijlen = [], vbModus = "hook";
+const VB = {
+  hook: { hook: { kicker: "Let op", tekst: "AI praat jou zo om", highlight: "om" }, sub: { woorden: ["iets", "van", "informatie"], actief: 2 } },
+  stat: { stat: { kicker: "Overtuigender", waarde: "64,4%", sub: "dan een echte mens" }, sub: { woorden: ["64,4", "procent", "meer"], actief: 1 } },
+  punt: { punt: { nummer: "1", titel: "Weet dat jij moe bent", sub: "en speelt er feilloos op in" }, sub: { woorden: ["een", "beetje", "moe"], actief: 2 } },
+  eind: { eind: true },
+};
+
+function formStijl() {
+  const s = {};
+  VELDEN.forEach(k => { const el = $("s_" + k); s[k] = el.type === "checkbox" ? el.checked : el.value; });
+  return s;
+}
+
+function hexNaarRgba(hex, dekking) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${(dekking / 100).toFixed(2)})`;
+}
+
+let logoVoorbeeld = null;
+function updateVoorbeeld() {
+  const w = $("vb").contentWindow;
+  if (!w || !w.zetStijl) return;
+  const s = formStijl();
+  w.zetStijl({
+    naam: s.naam, tagline: s.tagline, logo: logoVoorbeeld,
+    css: { "--accent": s.accent, "--accent-tekst": s.accentTekst, "--vlak": hexNaarRgba(s.vlak, s.vlakDekking),
+           "--tekst": s.tekst, "--font": `"${s.lettertype}"`, "--eindkaart": s.eindkaart },
+  });
+  const st = { ...VB[vbModus] };
+  if (!s.ondertitels) delete st.sub;
+  w.render(st);
+}
+
+async function laadStijl(slug) {
+  const s = stijlen.find(x => x.slug === slug);
+  if (!s) return;
+  VELDEN.forEach(k => { const el = $("s_" + k); if (el.type === "checkbox") el.checked = !!s[k]; else el.value = s[k]; });
+  $("s_logo").value = "";
+  logoVoorbeeld = s.heeftLogo ? (await (await fetch(`/api/huisstijlen/${slug}/overlay`)).json()).logo : null;
+  updateVoorbeeld();
+}
+
+async function laadStijlen(kies) {
+  const d = await (await fetch("/api/huisstijlen")).json();
+  stijlen = d.stijlen;
+  $("s_lettertype").innerHTML = d.lettertypes.map(f => `<option>${f}</option>`).join("");
+  const opties = stijlen.map(s => `<option value="${s.slug}">${s.naam.replace(/</g, "&lt;")}</option>`).join("");
+  $("stijlKeuze").innerHTML = opties + '<option value="">Geen (alleen knippen)</option>';
+  $("stijlBewerk").innerHTML = opties;
+  const slug = kies || (stijlen[0] && stijlen[0].slug);
+  if (slug) { $("stijlKeuze").value = slug; $("stijlBewerk").value = slug; laadStijl(slug); }
+}
+
+$("stijlBewerk").onchange = () => laadStijl($("stijlBewerk").value);
+$("stijlNieuw").onclick = () => { $("s_naam").value = ""; $("s_tagline").value = ""; logoVoorbeeld = null; $("s_logo").value = ""; $("s_naam").focus(); updateVoorbeeld(); };
+document.querySelectorAll(".stijl-form input, .stijl-form select").forEach(el => el.addEventListener("input", () => { $("stijlMelding").textContent = ""; updateVoorbeeld(); }));
+$("s_logo").onchange = () => {
+  const f = $("s_logo").files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => { logoVoorbeeld = r.result; updateVoorbeeld(); }; r.readAsDataURL(f);
+};
+document.querySelectorAll("[data-vb]").forEach(b => b.onclick = () => { vbModus = b.dataset.vb; updateVoorbeeld(); });
+$("vb").onload = updateVoorbeeld;
+
+$("stijlOpslaan").onclick = async () => {
+  const s = formStijl();
+  if (!s.naam.trim()) { $("stijlMelding").textContent = "Geef de huisstijl een naam."; $("stijlMelding").style.color = "var(--danger)"; return; }
+  const body = new FormData();
+  body.append("stijl", JSON.stringify({ ...s, vlakDekking: Number(s.vlakDekking) }));
+  if ($("s_logo").files[0]) body.append("logo", $("s_logo").files[0]);
+  const r = await fetch("/api/huisstijlen", { method: "POST", body });
+  const d = await r.json();
+  if (!r.ok) { $("stijlMelding").textContent = d.error; $("stijlMelding").style.color = "var(--danger)"; return; }
+  $("stijlMelding").style.color = "var(--green)"; $("stijlMelding").textContent = "Opgeslagen.";
+  laadStijlen(d.slug);
+};
+
+laadStijlen();
 </script>
 </body>
 </html>

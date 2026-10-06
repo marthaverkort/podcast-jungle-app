@@ -1,5 +1,6 @@
 """Jungle Shorts — lokale webapp. Start met: python app.py  (opent http://localhost:5055)"""
 
+import json
 import threading
 import traceback
 import uuid
@@ -8,7 +9,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
-from jungle_shorts import pipeline
+from jungle_shorts import huisstijl, pipeline
 
 BASE = Path(__file__).parent
 WORK = BASE / "werkmap"
@@ -61,15 +62,16 @@ def job_highlights(job, video, count, mode, language):
     return {"video": str(video), "clips": clips}
 
 
-def job_render(job, video, clips, fmt, subtitles):
+def job_render(job, video, clips, fmt, stijl_slug):
     video = resolve_video(video)
     segments = pipeline.transcribe(video)
+    stijl = huisstijl.voor_overlay(stijl_slug) if stijl_slug else None
     out_dir = OUTPUT / video.stem
     files = []
     for i, clip in enumerate(clips, 1):
         job["step"] = f"Short {i} van {len(clips)} renderen…"
         job["progress"] = (i - 1) / len(clips)
-        out = pipeline.render_clip(video, clip, segments, out_dir, fmt=fmt, subtitles=subtitles, index=i)
+        out = pipeline.render_clip(video, clip, segments, out_dir, fmt=fmt, stijl=stijl, index=i)
         files.append({"title": clip.get("title", out.stem), "url": f"/files/{video.stem}/{out.name}"})
     return {"files": files, "folder": str(out_dir.resolve())}
 
@@ -115,7 +117,39 @@ def render():
     clips = d.get("clips") or []
     if not clips:
         return jsonify(error="Selecteer minstens één clip."), 400
-    return jsonify(job=start_job(job_render, d.get("video", ""), clips, fmt, bool(d.get("subtitles", True))))
+    stijl_slug = d.get("huisstijl") or ""
+    if stijl_slug and stijl_slug not in {s["slug"] for s in huisstijl.lijst()}:
+        return jsonify(error="Onbekende huisstijl."), 400
+    return jsonify(job=start_job(job_render, d.get("video", ""), clips, fmt, stijl_slug))
+
+
+@app.get("/api/huisstijlen")
+def huisstijlen():
+    return jsonify(stijlen=huisstijl.lijst(), lettertypes=huisstijl.LETTERTYPES)
+
+
+@app.post("/api/huisstijlen")
+def huisstijl_bewaren():
+    data = json.loads(request.form.get("stijl", "{}"))
+    logo = request.files.get("logo")
+    logo_bytes, ext = None, None
+    if logo and logo.filename:
+        ext = Path(logo.filename).suffix.lower()
+        if ext not in (".png", ".svg", ".jpg", ".jpeg", ".webp"):
+            return jsonify(error="Logo moet png, svg, jpg of webp zijn."), 400
+        logo_bytes = logo.read()
+    return jsonify(slug=huisstijl.bewaar(data, logo_bytes, ext))
+
+
+@app.get("/voorbeeld")
+def voorbeeld():
+    """overlay.html los, voor de live preview in de huisstijl-editor."""
+    return send_from_directory(BASE / "jungle_shorts", "overlay.html")
+
+
+@app.get("/api/huisstijlen/<slug>/overlay")
+def huisstijl_overlay(slug):
+    return jsonify(huisstijl.voor_overlay(slug))
 
 
 @app.post("/api/fetch")

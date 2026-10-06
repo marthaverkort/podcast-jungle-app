@@ -1,0 +1,13 @@
+{
+  "naam": "Oranje voorbeeld",
+  "accent": "#FF5A1F",
+  "accentTekst": "#FFFFFF",
+  "vlak": "#18181B",
+  "vlakDekking": 86,
+  "tekst": "#FFFFFF",
+  "lettertype": "Archivo",
+  "eindkaart": "#FF5A1F",
+  "tagline": "Jouw tagline hier",
+  "eindkaartAan": true,
+  "ondertitels": true
+}
